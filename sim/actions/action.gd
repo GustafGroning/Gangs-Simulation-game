@@ -13,6 +13,10 @@ var trace_templates: Array = []              # Array[TraceTemplate] — risk rea
 var priority: int = 2
 # Whether candidates expand over the attention set (target = character).
 var targeted: bool = false
+# Whether repeating this action+target from last turn incurs the scorer's
+# repetition penalty. False for the idle floor candidate (idle streaks are
+# not "repetitive" in the sense the penalty targets).
+var subject_to_repetition_penalty: bool = true
 # Visibility parameters this action can be performed with (lazy expansion
 # only adds more when the action is hostile — phase 6).
 var visibilities: Array[int] = [E.Visibility.OPEN]

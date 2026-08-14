@@ -17,7 +17,7 @@ static func generate(ws: WorldState, c: Character) -> Array:
 				for vis in action.visibilities:
 					out.append(_make(action, c, tid, vis))
 		else:
-			if action.id != &"idle" and not action.requires(ws, c, null):
+			if not action.requires(ws, c, null):
 				continue
 			for vis in action.visibilities:
 				out.append(_make(action, c, -1, vis))

@@ -12,7 +12,7 @@ func _init() -> void:
 	var t := TraceTemplate.new()
 	t.kind = E.TraceKind.EYEWITNESS
 	t.reveals = [E.Field.ACTOR, E.Field.ACTION, E.Field.TARGET]
-	t.base_detectability = 0.4
+	t.base_detectability = Tuning.TAKEJOB_RISK_DETECT_ESTIMATE
 	trace_templates = [t]
 
 

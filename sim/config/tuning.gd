@@ -157,6 +157,11 @@ const JOB_TRACE_DETECT := {
 }
 const JOB_FAILURE_DETECT_BONUS: float = 0.15 # failures are conspicuous
 const ASSIGN_TRACE_DETECT: float = 0.5
+# Flat risk-estimate detectability TakeJob uses for the actor's OWN perceived
+# risk (Risk.perceived reads action.trace_templates) — deliberately not
+# per-kind like JOB_TRACE_DETECT, which governs actual trace emission at
+# resolution. See QUESTIONS.md: flat-estimate-vs-actual-detectability gap.
+const TAKEJOB_RISK_DETECT_ESTIMATE: float = 0.4
 const SABOTAGE_TRACE_DETECT: float = 0.5
 
 # ---- Information layer: gossip and speculation ----
@@ -192,6 +197,8 @@ const TRAIT_TAG_AFFINITY := {
 	E.Trait.OBSERVANT: [E.ActionTag.INVESTIGATIVE],
 }
 const LOYAL_VETO_SCORE: float = -100.0       # hard veto on hostile acts vs patron
+const RISK_HEAT_SEVERITY_MULT: float = 0.5   # perceived severity scales up with heat
+const CONTRIBUTION_DISPLAY_THRESHOLD: float = 0.001  # min |term| to surface on the chronicle
 
 # ---- Weight dynamics (phase 4) ----
 # Vengeance from believed harm: += severity × confidence × rate, per turn the
