@@ -32,7 +32,10 @@ echo "== 4/5 phase 4 scorer test (20 seeds x 100 turns) =="
 echo "== 5/5 CLI run under the scorer =="
 rm -rf runs
 ./gangs --seed 3 --turns 50 --out runs/ >/dev/null || fail=1
-grep -q "(" runs/chronicle.txt || { echo "chronicle carries no contribution terms"; fail=1; }
+# Scorer.top_terms formats each term as "name +0.12" / "name -0.12" joined by
+# " · "; a bare "(" would also match Job.generate_board's unrelated posting
+# lines, so anchor on the signed-magnitude format instead.
+grep -Eq '[+-][0-9]+\.[0-9]{2}' runs/chronicle.txt || { echo "chronicle carries no contribution terms"; fail=1; }
 
 if [ "$fail" -eq 0 ]; then
   echo "PHASE 4 EXIT TEST: PASS"

@@ -10,3 +10,4 @@ func _init() -> void:
 	tags = []
 	priority = 6
 	targeted = false
+	subject_to_repetition_penalty = false

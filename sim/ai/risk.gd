@@ -18,7 +18,7 @@ static func perceived(ws: WorldState, c: Character, action: Action, cand: Action
 		var p := t.base_detectability * density * (1.0 + ws.heat)
 		if c.has_trait(E.Trait.RECKLESS):
 			p *= Tuning.RECKLESS_DETECT_MULT  # underestimates — gets caught constantly
-		p_none *= 1.0 - clampf(p, 0.0, 0.95)
+		p_none *= 1.0 - clampf(p, 0.0, Tuning.DETECT_CAP)
 	var p_detected := 1.0 - p_none
 
 	# P_attributed: does it land on me?
@@ -48,7 +48,7 @@ static func perceived(ws: WorldState, c: Character, action: Action, cand: Action
 	var severity := 0.0
 	for tag in action.tags:
 		severity = maxf(severity, float(Tuning.RISK_SEVERITY_BY_TAG.get(tag, 0.0)))
-	severity *= 1.0 + ws.heat * 0.5
+	severity *= 1.0 + ws.heat * Tuning.RISK_HEAT_SEVERITY_MULT
 	if c.has_trait(E.Trait.CRAVEN):
 		severity *= Tuning.CRAVEN_SEVERITY_MULT
 

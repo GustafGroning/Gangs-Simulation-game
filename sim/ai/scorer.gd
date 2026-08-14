@@ -36,13 +36,13 @@ static func _score(ws: WorldState, c: Character, cand: ActionCandidate) -> void:
 				weight = c.goals.get(g, 0.0)
 		var term := weight * m
 		utility += term
-		if absf(term) > 0.001:
+		if absf(term) > Tuning.CONTRIBUTION_DISPLAY_THRESHOLD:
 			cand.contributions[E.Goal.keys()[g].to_lower()] = term
 	cand.utility = utility
 
 	# Risk — derived from trace templates.
 	cand.risk = Risk.perceived(ws, c, action, cand)
-	if cand.risk > 0.001:
+	if cand.risk > Tuning.CONTRIBUTION_DISPLAY_THRESHOLD:
 		cand.contributions["risk"] = -cand.risk
 
 	# Trait affinity — colours choices, must not dominate them.
@@ -64,7 +64,7 @@ static func _score(ws: WorldState, c: Character, cand: ActionCandidate) -> void:
 
 	# Repetition penalty (skipped for active plan steps — phase 5).
 	var repetition := 0.0
-	if cand.action == c.last_action and cand.target_id == c.last_target and cand.action != &"idle":
+	if action.subject_to_repetition_penalty and cand.action == c.last_action and cand.target_id == c.last_target:
 		repetition = Tuning.REPETITION_PENALTY
 		cand.contributions["repetition"] = -repetition
 
