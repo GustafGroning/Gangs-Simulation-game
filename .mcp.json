@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "gdai-mcp": {
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "run",
+        "/Users/gustaf/Personal/gangs!/addons/gdai-mcp-plugin-godot/gdai_mcp_server.py"
+      ],
+      "env": {}
+    }
+  }
+}

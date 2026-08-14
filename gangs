@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# CLI wrapper: ./gangs --seed 1 --turns 200 --out runs/
+# Set $GODOT to override the engine binary.
+set -euo pipefail
+cd "$(dirname "$0")"
+
+GODOT_BIN="${GODOT:-}"
+if [ -z "$GODOT_BIN" ]; then
+  if command -v godot >/dev/null 2>&1; then
+    GODOT_BIN=godot
+  else
+    GODOT_BIN="/Applications/Godot.app/Contents/MacOS/Godot"
+  fi
+fi
+
+exec "$GODOT_BIN" --headless --script main.gd -- "$@"
