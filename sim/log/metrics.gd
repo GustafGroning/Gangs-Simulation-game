@@ -41,6 +41,19 @@ var action_counts := {}
 var plans_completed := 0
 var plans_aborted := 0
 var plan_length_sum := 0
+var escalations := 0
+
+# Phase 6 counters (doc 4 §2 health/story metrics).
+var deaths := 0
+var arrests := 0
+var jobs_abandoned := 0             # worker died/was removed before their job resolved
+var rank_changes := 0
+var judgments := {
+	E.Verdict.DISMISSED: 0, E.Verdict.DEMOTED: 0, E.Verdict.EXILED: 0, E.Verdict.KILLED: 0,
+}
+var _actions_per_char := {}         # char_id -> non-idle actions taken, whole run
+var _feud_streak := {}              # pair_key -> consecutive turns both vengeance > 0.4
+var _feud_pairs_hit := {}           # pair_key -> true once streak reached 10 (doc 4 §2 "feuds")
 
 
 func plan_resolved(completed: bool, length: int) -> void:
@@ -51,8 +64,37 @@ func plan_resolved(completed: bool, length: int) -> void:
 		plans_aborted += 1
 
 
-func action_chosen(action: StringName) -> void:
+func escalation() -> void:
+	escalations += 1
+
+
+func death() -> void:
+	deaths += 1
+
+
+func arrest() -> void:
+	arrests += 1
+
+
+func job_abandoned() -> void:
+	jobs_abandoned += 1
+
+
+func rank_change() -> void:
+	rank_changes += 1
+
+
+func judgment_rendered(verdict: int) -> void:
+	judgments[verdict] = int(judgments.get(verdict, 0)) + 1
+
+
+# char_id is the actor who took this (non-idle) action, for
+# actions_per_char_variance (doc 4 §2). -1 (default) skips that bookkeeping —
+# used by the few call sites with no single responsible actor.
+func action_chosen(action: StringName, char_id: int = -1) -> void:
 	action_counts[action] = int(action_counts.get(action, 0)) + 1
+	if char_id != -1:
+		_actions_per_char[char_id] = int(_actions_per_char.get(char_id, 0)) + 1
 
 
 func action_entropy() -> float:
@@ -149,6 +191,32 @@ func sample_turn(ws: WorldState) -> void:
 	if med > 0.0:
 		for s in standings:
 			runaway_ratio_max = maxf(runaway_ratio_max, s / med)
+
+	_sample_feuds(ws)
+
+
+# "Pairs with sustained mutual vengeance > 0.4 for 10+ turns" (doc 4 §2).
+func _sample_feuds(ws: WorldState) -> void:
+	var ids := ws.characters.keys()
+	ids.sort()
+	for i in ids.size():
+		var a: int = ids[i]
+		var ca: Character = ws.characters[a]
+		if ca.state != E.CharState.ACTIVE:
+			continue
+		for j in range(i + 1, ids.size()):
+			var b: int = ids[j]
+			var cb: Character = ws.characters[b]
+			if cb.state != E.CharState.ACTIVE:
+				continue
+			var key := World.pair_key(a, b)
+			var mutual: bool = float(ca.vengeance.get(b, 0.0)) > 0.4 and float(cb.vengeance.get(a, 0.0)) > 0.4
+			if mutual:
+				_feud_streak[key] = int(_feud_streak.get(key, 0)) + 1
+				if int(_feud_streak[key]) >= 10:
+					_feud_pairs_hit[key] = true
+			else:
+				_feud_streak[key] = 0
 
 
 func _active_standings(ws: WorldState) -> Array[float]:
@@ -254,7 +322,58 @@ func finalize(ws: WorldState) -> Dictionary:
 		"plans_aborted": plans_aborted,
 		"plan_completion_rate": float(plans_completed) / maxf(1.0, float(plans_completed + plans_aborted)),
 		"mean_plan_length_at_execution": float(plan_length_sum) / maxf(1.0, float(plans_completed)),
+		"escalation_events": escalations,
+		"deaths_per_100_turns": float(deaths) * 100.0 / maxf(1.0, float(turns_sampled)),
+		"arrests": arrests,
+		"jobs_abandoned": jobs_abandoned,
+		"rank_changes_per_100_turns": float(rank_changes) * 100.0 / maxf(1.0, float(turns_sampled)),
+		"judgments_per_100_turns": float(_judgments_total()) * 100.0 / maxf(1.0, float(turns_sampled)),
+		"dismissed_verdict_fraction": float(judgments.get(E.Verdict.DISMISSED, 0)) / maxf(1.0, float(_judgments_total())),
+		"feuds": _feud_pairs_hit.size(),
+		"unique_actions_used": _unique_actions_used(),
+		"actions_per_char_variance": _variance(_actions_per_char_values(ws)),
+		# Lie Low is not one of the demo's 7 verbs — always 0, trivially in-band.
+		"lie_low_fraction": 0.0,
 	}.merged(info_metrics(ws))
+
+
+func _judgments_total() -> int:
+	var total := 0
+	for v in judgments:
+		total += int(judgments[v])
+	return total
+
+
+func _unique_actions_used() -> float:
+	var enabled := 0
+	for a: Action in ActionRegistry.all_actions():
+		if a.id != &"idle":
+			enabled += 1
+	var used := 0
+	for a in action_counts:
+		if a != &"idle" and int(action_counts[a]) > 0:
+			used += 1
+	return float(used) / maxf(1.0, float(enabled))
+
+
+func _actions_per_char_values(ws: WorldState) -> Array:
+	var values := []
+	for cid: int in ws.characters:
+		values.append(float(_actions_per_char.get(cid, 0)))
+	return values
+
+
+static func _variance(values: Array) -> float:
+	if values.size() < 2:
+		return 0.0
+	var mean := 0.0
+	for v in values:
+		mean += float(v)
+	mean /= values.size()
+	var acc := 0.0
+	for v in values:
+		acc += (float(v) - mean) * (float(v) - mean)
+	return acc / values.size()
 
 
 func _action_counts_readable() -> Dictionary:

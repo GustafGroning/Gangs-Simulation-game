@@ -39,6 +39,12 @@ var last_action: StringName = &""
 var last_target: int = -1
 var favors: Dictionary = {}          # char_id -> int (tokens they owe me)
 var purchased_opinion: Dictionary = {}  # char_id -> float, brittle channel
+# Not in doc 1's schema — added in phase 6 for doc 3 §4's "a DISMISSED
+# verdict damages the accuser's credibility, reducing the weight of their
+# future beliefs during transmission" (also used by a collapsed Dig, doc's
+# Learn section). Multiplies the confidence THIS character's gossip/reports
+# land with; see Beliefs.transmission / Beliefs.upward_reporting.
+var credibility: float = 1.0
 
 
 func to_dict() -> Dictionary:
@@ -68,6 +74,7 @@ func to_dict() -> Dictionary:
 		"last_target": last_target,
 		"favors": favors.duplicate(),
 		"purchased_opinion": purchased_opinion.duplicate(),
+		"credibility": credibility,
 	}
 
 
@@ -96,6 +103,7 @@ static func from_dict(d: Dictionary) -> Character:
 	c.last_target = int(d["last_target"])
 	c.favors = World.int_keyed_ints(d["favors"])
 	c.purchased_opinion = World.int_keyed_floats(d["purchased_opinion"])
+	c.credibility = float(d.get("credibility", 1.0))
 	return c
 
 

@@ -267,13 +267,20 @@ const PLAN_MIN_TERMINAL_SCORE: float = 0.15
 const PLAN_ASSUMED_JOB_DIFFICULTY: float = 0.45
 # Goal -> ordered list of action ids, most to least severe: on repeated
 # frustration, the planner escalates to the next entry instead of abandoning.
-# assign_job escalates to sabotage_job (design_doc.md's "sabotage → frame →
-# kill" ladder, truncated to the demo's 7-verb scope — Frame isn't a demo
-# verb and Kill is still phase 6). sabotage_job plans have no ladder entry
-# of their own, so a frustrated one always abandons — gangs-action-choice.md
-# §4's other valid branch, not a fallback of last resort.
+# assign_job escalates to sabotage_job escalates to kill (design_doc.md's
+# "sabotage → frame → kill" ladder, with Frame skipped — it isn't one of the
+# demo's 7 verbs). A frustrated kill plan has no further rung, so it always
+# abandons — gangs-action-choice.md §4's other valid branch, not a fallback
+# of last resort.
+#
+# Planner._try_escalate looks the ladder up BY THE PLAN'S CURRENT
+# goal_action (not the plan's original starting action), so every rung
+# except the last must also be a key pointing at the same ladder — otherwise
+# an already-escalated plan (goal_action == "sabotage_job") can never climb
+# again. Duplicated literal, not aliased; both entries must stay identical.
 const ESCALATION_LADDER := {
-	&"assign_job": [&"assign_job", &"sabotage_job"],
+	&"assign_job": [&"assign_job", &"sabotage_job", &"kill"],
+	&"sabotage_job": [&"assign_job", &"sabotage_job", &"kill"],
 }
 
 # ---- SabotageJob (pulled forward from phase 6 — see DECISIONS.md) ----
@@ -285,3 +292,65 @@ const SABOTAGE_AMBITION_MAG: float = 0.15
 # that sabotage reliably flips a likely SUCCESS/PARTIAL into FAILURE/
 # DISASTER, matching "job fails" in the doc's effect column.
 const SABOTAGE_PENALTY: float = 0.35
+
+# ---- Dig (phase 6, design_doc.md "Learn" section) ----
+# Field enum (doc 1 §2) has no MOTIVE value — only ACTOR/ACTION/TARGET/
+# INSTRUMENT — so Dig is scoped to resolving a held belief's ACTOR field,
+# "the crux of the entire design" per the doc's own words. See QUESTIONS.md.
+const DIG_UNCERTAIN_CONF_THRESHOLD: float = 0.55  # a held ACTOR claim below this is still worth digging
+const DIG_AMBITION_SCALE: float = 0.6
+const DIG_SECURITY_SCALE: float = 0.4
+const DIG_ELAPSED_DECAY: float = 0.03        # success chance lost per turn since the underlying event ("cold cases go cold")
+const DIG_OBSERVANT_BONUS: float = 0.15
+const DIG_HEAT_PENALTY_MULT: float = 0.2     # high heat makes digging harder too
+const DIG_COLLAPSE_CREDIBILITY_HIT: float = 0.2   # doc 3 §4 reuses this for a DISMISSED Denounce's accuser too
+const DIG_RESOLVE_CONFIDENCE: float = 0.85
+const DIG_CORROBORATE_BUMP: float = 0.2
+const DIG_COLLAPSE_CONFIDENCE: float = 0.1
+const DIG_FALSE_RESOLVE_CONFIDENCE: float = 0.6   # "a confident, plausible, wrong answer"
+
+# ---- SpreadRumor (phase 6, design_doc.md "Whisper" section) ----
+const SPREAD_RUMOR_TRACE_DETECT: float = 0.2      # "source trace at low hop count" — deliberately low
+const SPREAD_RUMOR_AMBITION_MAG: float = 0.15
+# Gentler than passive gossip's HOP_CONFIDENCE_DECAY — a deliberate telling
+# reads clearer than an overheard rumor.
+const SPREAD_RUMOR_HOP_DECAY: float = 0.1
+
+# ---- Denounce / Judgment (phase 6, doc 3 §4) ----
+const DENOUNCE_CONF_THRESHOLD: float = 0.5
+const DENOUNCE_RANK_GAP_MAX: int = 2
+const DENOUNCE_AMBITION_MAG: float = 0.3
+const JUDGMENT_DISMISS_ACCUSER_STANDING: float = 4.0
+const JUDGMENT_DISMISS_VENGEANCE: float = 0.4
+const JUDGMENT_PUBLIC_CONFIDENCE: float = 0.9     # verdict is "the one reliable broadcast channel"
+
+# ---- Kill (phase 6, design_doc.md "Strike" section) ----
+# "Opportunity or instrument" (doc) isn't a precise gate; read as: physical
+# proximity in the tree (patron/crew — an "opportunity") OR a grudge strong
+# enough that the actor has gone looking for "an instrument". See QUESTIONS.md.
+const KILL_VENGEANCE_GATE: float = 0.5
+const KILL_TRACE_DETECT: float = 0.7              # "heavy traces"
+const KILL_AMBITION_MAG: float = 0.2
+const KILL_AMBITION_SUPERIOR_MULT: float = 2.0    # removing a superior opens their slot — worth more
+
+# ---- Vacancy contest (phase 6, doc 3 §2) ----
+const PROXIMITY_BONUS: float = 5.0
+const CONTEST_LOSER_VENGEANCE: float = 0.3
+const CONTEST_LOSER_AMBITION: float = 0.2
+
+# ---- Exogenous events (phase 6, doc 3 §3) ----
+# Demo scope prioritises rival hit and arrest (doc 5 phase 6 task 7); the
+# other six kinds in doc 3's table are BACKLOG.md.
+# EXO_BASE_CHANCE is doc 3's rate for the FULL 8-kind table ("roughly one
+# shock every 6-8 turns"); only rival_hit draws on it here, so it is scaled
+# by RIVAL_HIT_SHARE (1 of 8 kinds) rather than used at face value — at face
+# value rival_hit alone would fire ~8x doc 3's intended overall cadence and
+# blow well past deaths_per_100_turns' 2-6 band on its own.
+const EXO_BASE_CHANCE: float = 0.15
+const RIVAL_HIT_SHARE: float = 0.125
+const EXO_COOLDOWN: int = 3                       # turns between exogenous events
+const ARREST_HEAT_TRIGGER: float = 0.6
+const ARREST_HEAT_CHANCE: float = 0.2             # per-turn roll once heat is over the trigger
+const ARREST_DURATION_MIN: int = 5
+const ARREST_DURATION_MAX: int = 15
+const ARREST_FROM_DISASTER_CHANCE: float = 0.3    # violent-job DISASTER → arrest roll (doc 3 §1)

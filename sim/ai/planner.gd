@@ -95,7 +95,7 @@ static func tick_after_resolution(ws: WorldState, c: Character, metrics: Metrics
 		p.frustration += 1
 
 	if not alive or p.patience <= 0 or p.frustration >= Tuning.FRUSTRATION_THRESHOLD:
-		if not _try_escalate(ws, c, target):
+		if not _try_escalate(ws, c, target, metrics):
 			metrics.plan_resolved(false, _length(p))
 			c.plan = null
 
@@ -108,7 +108,7 @@ static func _length(p: Plan) -> int:
 # config has one and it's currently reachable. Empty ladder (phase 5) always
 # returns false — abandon-and-replan, gangs-action-choice.md §4's other
 # valid branch, not a fallback of last resort.
-static func _try_escalate(ws: WorldState, c: Character, target: Character) -> bool:
+static func _try_escalate(ws: WorldState, c: Character, target: Character, metrics: Metrics) -> bool:
 	if target == null or target.state != E.CharState.ACTIVE:
 		return false
 	var ladder: Array = Tuning.ESCALATION_LADDER.get(c.plan.goal_action, [])
@@ -129,4 +129,5 @@ static func _try_escalate(ws: WorldState, c: Character, target: Character) -> bo
 	c.plan.goal_action = next_id
 	c.plan.patience = Tuning.DEFAULT_PATIENCE
 	c.plan.frustration = 0
+	metrics.escalation()
 	return true

@@ -27,6 +27,20 @@ static func templates_for(ws: WorldState, e: Event) -> Array:
 			"detect": Tuning.SABOTAGE_TRACE_DETECT,
 			"points_to_id": e.actor_id,
 		}]
+	if e.action == &"rival_hit":
+		# Phase 6, doc 3 §3: "an outsider kills a member... the traces point
+		# nowhere and everyone with known motive looks guilty." No ACTOR
+		# reveal at all (actor_id is -1, an outsider — there is no insider to
+		# eventually attribute it to); the belief layer's speculation path
+		# (Beliefs.pick_plausible_suspect) is what manufactures suspects.
+		return [{
+			"kind": E.TraceKind.PHYSICAL,
+			"reveals": [E.Field.ACTION, E.Field.TARGET],
+			"detect": Tuning.KILL_TRACE_DETECT,
+			"points_to_id": -1,
+		}]
+	# "arrest" deliberately registers no trace template — doc 3 §2: the one
+	# vacancy source with no culprit and "no blame". See Exogenous.gd.
 	return []
 
 
