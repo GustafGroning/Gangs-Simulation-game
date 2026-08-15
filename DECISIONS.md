@@ -2,6 +2,24 @@
 
 Newest first. Each entry: what was decided, and why.
 
+## 2026-08-15 — Phase 4 (validated)
+
+- **`JOBS_PER_TURN` raised 3→5.** The phase-4 scorer replaced the phase-2
+  scaffold's assignment policy — which had an explicit longest-idle
+  anti-starvation tiebreak — with deterministic goal-driven best-fit choice.
+  Under the scorer, the same low-fit rank-3 characters (fewest eligible job
+  kinds, per doc 3's rank bands, and the largest population) kept losing the
+  same jobs to the same competitors every turn; at `JOBS_PER_TURN=3`, 11/20
+  seeds had a character idle 20+ consecutive turns. `5` clears it in all 20.
+  Judgment call, not a canon value — see thoughts/phase_4_scorer.md.
+- **`test_phase4.gd`'s vengeance-hit-rate counters fixed**: GDScript lambdas
+  capture value-type locals (int/float/bool) by value, not by reference: a
+  closure incrementing an outer `int` mutates its own snapshot only. Counters
+  now live in a Dictionary (a reference type) so mutations are visible
+  outside the closure. This was a test-authoring bug, not a scorer bug — the
+  vengeance-driven assignment mechanic was correct throughout; the test just
+  never reported the real number (76% grudge-target hit rate once fixed).
+
 ## 2026-08-14 — Phase 3
 
 - **Trace decay is subtractive** (detectability − 0.06/turn): traces die in

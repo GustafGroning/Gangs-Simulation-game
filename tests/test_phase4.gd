@@ -41,6 +41,11 @@ func _initialize() -> void:
 			if c.state == E.CharState.ACTIVE and c.crew_ids.size() >= 2:
 				planted[cid] = c.crew_ids[0]
 
+		# GDScript lambdas capture value-type locals (int/float/bool) BY VALUE,
+		# not by reference — `vengeful_chances += 1` inside a closure mutates
+		# only the closure's own snapshot, never the outer variable. Route
+		# every counter through a Dictionary (a reference type) instead.
+		var counts := {"vengeful_chances": 0, "vengeful_hits": 0}
 		var events_seen := {}
 		var scan := func(w: WorldState) -> void:
 			# Keep the planted grudges alive against decay.
@@ -62,9 +67,9 @@ func _initialize() -> void:
 					continue
 				var p := Job.success_estimate(w.characters[e.target_id], j)
 				if planted.has(e.actor_id):
-					vengeful_chances += 1
+					counts["vengeful_chances"] += 1
 					if planted[e.actor_id] == e.target_id:
-						vengeful_hits += 1
+						counts["vengeful_hits"] += 1
 						vengeful_p.append(p)
 					else:
 						neutral_p.append(p)
@@ -75,6 +80,8 @@ func _initialize() -> void:
 		for t in TURNS:
 			Turn.run(ws, chron, metrics, [scan])
 		var m := metrics.finalize(ws)
+		vengeful_chances += int(counts["vengeful_chances"])
+		vengeful_hits += int(counts["vengeful_hits"])
 
 		agg_entropy += m["action_entropy"]
 		if m["action_entropy"] <= 1.0:

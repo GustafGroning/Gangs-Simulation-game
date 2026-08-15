@@ -61,10 +61,20 @@ const REPORT_SELF_IMPLICATION_MULT: float = 0.1
 const ATTENTION_BUDGET_SUPERIOR: int = 4     # reports processed per turn
 
 # ---- Economy, contest, judgment, heat ----
-# Doc 4 default was 2; raised to 3 for the 16-character bootstrap cast —
-# at 2, a third of the cast idles 20+ turns purely from supply scarcity
-# (phase 2 measurement, see thoughts/phase_2 report).
-const JOBS_PER_TURN: int = 3
+# Doc 4 default was 2; raised to 3 for the 16-character bootstrap cast in
+# phase 2 (see thoughts/phase_2 report) — but that was under the phase-2
+# *scaffold* selection policy, which had an explicit "contested takes go to
+# the longest-idle" anti-starvation rule. The phase-4 scorer replaced that
+# wholesale with goal-driven best-fit choice and no such tiebreak, so the
+# same supply that was enough for the scaffold under-serves the
+# lowest-rank tier again: rank-3 characters have the smallest eligible job
+# menu (locked out of heist/negotiation, doc 3 §1 rank bands) and the
+# largest population competing over it, and under the scorer's
+# deterministic best-fit ranking, the same low-fit individuals keep losing
+# every turn instead of the scaffold's rotation. Raised to 5 — at 3-4,
+# 2-11/20 seeds (of tests/test_phase4.gd's 20) still had characters idle
+# 20+ consecutive turns; at 5 none did. See thoughts/phase_4 report.
+const JOBS_PER_TURN: int = 5
 const JOB_LIFETIME: int = 4
 const JOB_EXPIRY_PENALTY: float = 2.0
 # Doc 4 default was 0.6; at 0.6 the outcome value distribution is too narrow
@@ -232,3 +242,46 @@ const PROTECTION_WEIGHT: float = 0.25
 # (World.opinion_of). Collapse-under-pressure logic lands with the Court
 # actions; until then purchased opinion counts at face value.
 const PURCHASED_OPINION_MULT: float = 1.0
+
+# ---- Planner (phase 5) ----
+# GAMMA, CONTINUATION_BONUS, MAX_PLAN_DEPTH, DEFAULT_PATIENCE and
+# FRUSTRATION_THRESHOLD are declared above under Scoring (doc 4 §1 names
+# them there). The demo's verb set at phase 5 is still only TakeJob/AssignJob
+# (demo_tasks.md phase 5 Goal line) — neither has an actor-achievable
+# multi-step precondition chain (no money/standing/rank gate; AssignJob's
+# only failing requires() clause, once rank/crew hold, is "no eligible open
+# job exists for the target right now", which clears itself via job-board
+# refresh, not via another action). True backward-chaining through an
+# intermediate action (the doc's DoFavor→Kill example) needs verbs outside
+# the 7-verb demo scope (DoFavor is post-demo; Sabotage/Kill are phase 6) —
+# see QUESTIONS.md and thoughts/phase_5_planner.md. Plans this phase are
+# single-step and gated purely on that job-availability condition, scored
+# via Action.plan_value()/gated_recoverably(), persisting across turns via
+# DEFAULT_PATIENCE the same way a longer chain would.
+# Minimum weighted terminal value (Scorer.weighted_utility) to bother
+# forming a plan at all — keeps every job-hungry character from opening a
+# plan on every gated target in their attention set.
+const PLAN_MIN_TERMINAL_SCORE: float = 0.15
+# Assumed job difficulty AssignJob's plan_value() uses to estimate the value
+# of assigning a currently-nonexistent job (mean of JOB_KINDS difficulty).
+const PLAN_ASSUMED_JOB_DIFFICULTY: float = 0.45
+# Goal -> ordered list of action ids, most to least severe: on repeated
+# frustration, the planner escalates to the next entry instead of abandoning.
+# assign_job escalates to sabotage_job (design_doc.md's "sabotage → frame →
+# kill" ladder, truncated to the demo's 7-verb scope — Frame isn't a demo
+# verb and Kill is still phase 6). sabotage_job plans have no ladder entry
+# of their own, so a frustrated one always abandons — gangs-action-choice.md
+# §4's other valid branch, not a fallback of last resort.
+const ESCALATION_LADDER := {
+	&"assign_job": [&"assign_job", &"sabotage_job"],
+}
+
+# ---- SabotageJob (pulled forward from phase 6 — see DECISIONS.md) ----
+# Flat Ambition contribution: a rival's stumble is a small win regardless of
+# vengeance (design_doc.md: "Serves: Ambition, Vengeance").
+const SABOTAGE_AMBITION_MAG: float = 0.15
+# Subtracted from the job resolution formula's success value (doc 3 §1's
+# `sabotage_penalty` term) when Job.sabotaged_by_id is set — large enough
+# that sabotage reliably flips a likely SUCCESS/PARTIAL into FAILURE/
+# DISASTER, matching "job fails" in the doc's effect column.
+const SABOTAGE_PENALTY: float = 0.35

@@ -13,6 +13,15 @@ var payout_money: int = 0
 var payout_standing: float = 0.0
 var assigned_to_id: int = -1         # -1 = unassigned
 var assigned_by_id: int = -1         # -1 = self-selected
+# Turn assignment happened; -1 = unassigned. Not in doc 3's Job struct —
+# added in phase 5 so a job spends exactly one turn "in progress" (assigned,
+# unresolved) before Job.resolve() runs, per doc 4/5 turn.gd's
+# assigned_turn < ws.turn filter. Without a gap, SabotageJob (doc 3 §1: "job
+# fails, target −standing", requiring "know target's assignment") would have
+# no legal target — same-turn assignment+resolution left no turn where a job
+# was assigned but not yet resolved for anyone to intervene on. See
+# DECISIONS.md and thoughts/phase_5_planner.md.
+var assigned_turn: int = -1
 var resolved: bool = false
 var outcome: int = E.JobOutcome.PENDING
 var sabotaged_by_id: int = -1        # ground truth, never read by AI
@@ -31,6 +40,7 @@ func to_dict() -> Dictionary:
 		"payout_standing": payout_standing,
 		"assigned_to_id": assigned_to_id,
 		"assigned_by_id": assigned_by_id,
+		"assigned_turn": assigned_turn,
 		"resolved": resolved,
 		"outcome": outcome,
 		"sabotaged_by_id": sabotaged_by_id,
@@ -50,6 +60,7 @@ static func from_dict(d: Dictionary) -> Job:
 	j.payout_standing = float(d["payout_standing"])
 	j.assigned_to_id = int(d["assigned_to_id"])
 	j.assigned_by_id = int(d["assigned_by_id"])
+	j.assigned_turn = int(d.get("assigned_turn", -1))
 	j.resolved = bool(d["resolved"])
 	j.outcome = int(d["outcome"])
 	j.sabotaged_by_id = int(d["sabotaged_by_id"])
@@ -174,7 +185,7 @@ static func _boss_id(ws: WorldState) -> int:
 static func resolve(ws: WorldState, j: Job, chron: Chronicle, metrics: Metrics, chosen_note: String = "") -> Event:
 	var worker: Character = ws.characters[j.assigned_to_id]
 	var rank_bonus := (3 - worker.rank) * Tuning.JOB_RANK_BONUS_PER_LEVEL
-	var sabotage_penalty := 0.0  # wired in phase 6 via sabotaged_by_id
+	var sabotage_penalty := Tuning.SABOTAGE_PENALTY if j.sabotaged_by_id != -1 else 0.0
 	var value := clampf(
 		0.5
 		+ (worker.competence - j.difficulty) * Tuning.COMPETENCE_WEIGHT

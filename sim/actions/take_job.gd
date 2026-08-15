@@ -39,6 +39,7 @@ func execute(world: WorldState, cand: ActionCandidate) -> Event:
 	if j == null:
 		return null
 	j.assigned_to_id = actor.id
+	j.assigned_turn = world.turn
 	return null  # the take_job event is written by Job.resolve
 
 

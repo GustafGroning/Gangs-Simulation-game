@@ -35,6 +35,12 @@ static func run(ws: WorldState, chron: Chronicle, metrics: Metrics, injections: 
 			continue
 		ws.clear_events_read()
 		c.attention = Attention.build(ws, c)
+		if c.plan == null:
+			Planner.maybe_start(ws, c)
+			if c.plan != null:
+				chron.line("%s begins plotting: %s -> %s (patience %d)" % [
+					c.name, c.plan.goal_action,
+					(ws.characters[c.plan.target_id] as Character).name, c.plan.patience])
 		var cands := Candidates.generate(ws, c)
 		Scorer.score_all(ws, c, cands)
 		var pick := Selection.choose(ws, c, cands)
@@ -81,10 +87,29 @@ static func run(ws: WorldState, chron: Chronicle, metrics: Metrics, injections: 
 		else:
 			contrib_notes[actor.id] = Scorer.top_terms(cand)
 
-	# Jobs that found a worker this turn resolve now, in job-id order.
+	# Starting a job (self-selected or assigned) is real activity even
+	# though it resolves next turn — credit the worker now, or the
+	# assignment→resolution latency (phase 5) would read as a full idle
+	# turn every time a job is taken, artificially inflating idle streaks.
+	for j: Job in ws.jobs:
+		if j.assigned_turn == ws.turn:
+			metrics.mark_acted(j.assigned_to_id)
+
+	# Plan bookkeeping: advance/complete on a match, else tick
+	# patience/frustration and abort (or escalate) on exhaustion. Reads
+	# actor.last_action/last_target, just set above.
+	for cid2 in ids:
+		var c2: Character = ws.characters[cid2]
+		if c2.state == E.CharState.ACTIVE:
+			Planner.tick_after_resolution(ws, c2, metrics)
+
+	# Jobs assigned on an EARLIER turn resolve now, in job-id order. One turn
+	# of latency between assignment and resolution (phase 5) — a job spends
+	# exactly one turn "in progress" so SabotageJob has a legal window; see
+	# Job.assigned_turn's comment and thoughts/phase_5_planner.md.
 	var to_resolve := []
 	for j: Job in ws.jobs:
-		if not j.resolved and j.assigned_to_id != -1:
+		if not j.resolved and j.assigned_to_id != -1 and j.assigned_turn < ws.turn:
 			to_resolve.append(j)
 	to_resolve.sort_custom(func(a: Job, b: Job): return a.id < b.id)
 	for j: Job in to_resolve:

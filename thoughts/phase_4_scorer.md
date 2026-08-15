@@ -1,9 +1,12 @@
-# Phase 4 — Scorer (WIP: implemented, NOT yet validated)
+# Phase 4 — Scorer
 
-Date: 2026-08-14 · Status: **code complete, exit test written but NOT RUN**
+Date: 2026-08-14 to 2026-08-15 · Status: **PHASE 4 EXIT TEST: PASS**
 
-Gustaf returned mid-phase; run paused here. Nothing below has passed its
-exit test yet — treat all of phase 4 as unverified.
+`tests/phase4_exit_test.sh` passes end to end on a local Godot 4.7.1
+session: determinism grep, class-cache/parse, phase 1+3 regressions (34 +
+44 checks), the phase 4 scorer test (45 checks, 20 seeds × 100 turns), and
+a CLI run with contribution terms in the chronicle. Per demo_tasks.md
+standing instruction #8, phase 5 can now start (new session).
 
 ## Built (unverified)
 - `actions/action.gd` — the doc 1 §5 contract, plus `priority` (resolution
@@ -71,17 +74,51 @@ execution:
   the −1..1 magnitude bound is a real `assert` not a clamp, `-1` target-id
   handling is consistent throughout.
 
-**Still true: nothing below has actually been run.** The vengeance-assignment
-mechanics look internally consistent by inspection (see review notes) but the
-exit test's numeric bands (entropy, hit-rate margins, fill/inert sanity) need
-a real headless run — expect the tuning iteration the previous note called
-out. This needs a Godot-capable (local or CI-with-Godot) session.
+## 2026-08-15 — First real run (local Godot 4.7.1), two bugs found and fixed
 
-## Next step when resuming
-Run `tests/phase4_exit_test.sh` on a machine with Godot 4.7 installed:
-entropy > 1.0, vengeance-assignment correlation (planted grudges → harder
-jobs, disproportionate targeting), fill/inert sanity under the scorer,
-phases 1+3 regressions, CLI chronicle carries contribution terms.
-Expect a tuning iteration or two (e.g. assign-vs-take balance, fill rate).
-Per the phase gate (demo_tasks.md standing instruction #8), phases 5-7 do not
-start until this passes and is reported.
+`tests/phase4_exit_test.sh` initially failed 13/45 checks in `test_phase4.gd`:
+`inert_characters` over threshold in 11/20 seeds, and "vengeful superiors
+never assigned at all" / "grudge targets got only 0.00 of their superiors'
+assignments" in all 20. Root-caused both with throwaway diagnostic scripts
+(`tests/debug_phase4.gd`, kept — a couple more were used and deleted) before
+touching any code:
+
+- **Real bug, game logic: rank-3 characters starve under the scorer.**
+  `tests/debug_phase4.gd` showed the scorer legitimately ranking `assign_job`
+  at a grudge target as the top-scoring candidate turn after turn — the
+  vengeance mechanic itself was never broken. The starvation was structural:
+  the phase-2 scaffold policy that `JOBS_PER_TURN=3` was tuned against (see
+  phase-2 entry in DECISIONS.md) had an explicit "contested takes go to the
+  longest-idle" anti-starvation rule. The phase-4 scorer replaced that
+  wholesale with deterministic goal-driven best-fit choice (per DECISIONS.md
+  phase-2 note: "Replaced wholesale by the scorer in phase 4") — with no
+  fairness tiebreak, the same low-fit rank-3 characters (locked out of
+  heist/negotiation by doc 3's rank bands, and outnumbering every other rank)
+  kept losing the same jobs to the same higher-fit competitors every turn.
+  Raised `JOBS_PER_TURN` 3→5 (see comment in `tuning.gd`): 11 failing seeds
+  → 2 at `JOBS_PER_TURN=4` → 0 at `5`. This is a **judgment call, not a
+  design-doc answer** — doc 4 doesn't give a value for a 16-character cast
+  under scorer-driven (non-scaffold) selection; flagging here per CLAUDE.md
+  rather than treating it as self-evidently correct. Worth a real sweep in
+  phase 7 rather than resting on 20 seeds.
+- **Test-harness bug, not a game bug:** `test_phase4.gd`'s per-seed `scan`
+  closure incremented `vengeful_chances`/`vengeful_hits` (plain `int` locals
+  declared outside the closure) from inside the closure. GDScript lambdas
+  capture value-type locals (int/float/bool/String) **by value** — the
+  closure was mutating its own private snapshot, never the outer variable,
+  so both stayed 0 for the entire run regardless of what actually happened.
+  (`vengeful_p`/`neutral_p`, both Arrays — a reference type — worked
+  correctly the whole time, which is why the aggregate print already showed
+  a real "p_succ 0.49 vs 0.65" split even while `hit_rate` read "0.00 (0/0)".)
+  Fixed by routing both counters through a Dictionary. After the fix: grudge
+  targets get 76% of their vengeful superior's assignments (2424/3192) —
+  the real signal the test was written to catch, just never actually
+  reporting it.
+
+Both fixes are small and mechanical; nothing about the scorer's actual
+decision logic needed to change. Full exit test now passes: determinism grep,
+class-cache/parse, phase 1+3 regressions (34+44 checks), phase 4 scorer test
+(45/45), CLI run with contribution terms.
+
+Per the phase gate (demo_tasks.md standing instruction #8), phase 5 can now
+start — new session, per Work modes in CLAUDE.md.

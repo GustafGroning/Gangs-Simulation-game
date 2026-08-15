@@ -34,6 +34,30 @@ func evaluate(_world: WorldState, _actor: Character, _target: Character) -> Dict
 	return {}
 
 
+# ---- Planner hooks (phase 5, gangs-action-choice.md §4) ----
+# The planner needs to value and gate a targeted action WHILE it is currently
+# illegal (requires() == false) — evaluate() can't be trusted there since it's
+# usually undefined/empty for a missing resource. These stay generic (the
+# planner calls them the same way the scorer calls evaluate(), never
+# branching on action identity — hard rule 2 extends here) with a safe
+# default of "not plannable", which is correct for untargeted actions and for
+# targeted actions with no recoverable gate.
+
+# True iff requires() is false ONLY because of a condition that can become
+# true on its own (e.g. a matching resource not existing THIS turn), as
+# opposed to a structural/permanent mismatch (wrong rank, not in crew_ids).
+# Default false: most actions have no such recoverable gate to plan around.
+func gated_recoverably(_world: WorldState, _actor: Character, _target: Character) -> bool:
+	return false
+
+
+# Estimated { E.Goal: magnitude } for a currently-gated instance, using a
+# typical/assumed resource in place of the missing one. Only called when
+# gated_recoverably() is true. Default: same shape as evaluate(), no value.
+func plan_value(_world: WorldState, _actor: Character, _target: Character) -> Dictionary:
+	return {}
+
+
 # Apply effects, return the Event (may be null when the effect materializes
 # elsewhere, e.g. TakeJob's work event comes from job resolution).
 func execute(_world: WorldState, _cand: ActionCandidate) -> Event:

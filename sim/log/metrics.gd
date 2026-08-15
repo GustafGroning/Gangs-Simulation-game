@@ -34,6 +34,22 @@ var _acted_this_turn := {}           # char_id -> bool
 # remainder is filled in at sample_turn.
 var action_counts := {}
 
+# Plan tracking (phase 5). `length` is turns-alive at resolution (1 minimum —
+# a plan can't complete the same turn it's created, since it's only formed
+# while its step is gated); mean_plan_length_at_execution is over completed
+# plans only, matching "at execution" — an abandoned plan never executed.
+var plans_completed := 0
+var plans_aborted := 0
+var plan_length_sum := 0
+
+
+func plan_resolved(completed: bool, length: int) -> void:
+	if completed:
+		plans_completed += 1
+		plan_length_sum += length
+	else:
+		plans_aborted += 1
+
 
 func action_chosen(action: StringName) -> void:
 	action_counts[action] = int(action_counts.get(action, 0)) + 1
@@ -234,6 +250,10 @@ func finalize(ws: WorldState) -> Dictionary:
 		"disloyal_rival_reports": disloyal_rival_reports,
 		"action_entropy": action_entropy(),
 		"action_counts": _action_counts_readable(),
+		"plans_completed": plans_completed,
+		"plans_aborted": plans_aborted,
+		"plan_completion_rate": float(plans_completed) / maxf(1.0, float(plans_completed + plans_aborted)),
+		"mean_plan_length_at_execution": float(plan_length_sum) / maxf(1.0, float(plans_completed)),
 	}.merged(info_metrics(ws))
 
 

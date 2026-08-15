@@ -33,6 +33,41 @@ func evaluate(world: WorldState, actor: Character, target: Character) -> Diction
 	return _best_choice(world, actor, target)["magnitudes"]
 
 
+# Structural eligibility (rank, crew membership) holds but no open job
+# currently matches — that clears on its own when the board refreshes, so
+# it's worth a plan; a rank/crew mismatch never will be.
+func gated_recoverably(world: WorldState, actor: Character, target: Character) -> bool:
+	if target == null or actor.rank >= target.rank or not (target.id in actor.crew_ids):
+		return false
+	if Job.assigned_open_job(world, target.id) != null:
+		return false
+	return _best_choice(world, actor, target)["job"] == null
+
+
+# Same shape as _best_choice's magnitudes, but for a job that doesn't exist
+# yet: assumes a typical-difficulty job (Tuning.PLAN_ASSUMED_JOB_DIFFICULTY)
+# so the planner has something to value a currently-gated assignment against.
+func plan_value(world: WorldState, actor: Character, target: Character) -> Dictionary:
+	var vengeance: float = actor.vengeance.get(target.id, 0.0)
+	var w_standing: float = actor.goals.get(E.Goal.STANDING, 0.0)
+	var p_succ := clampf(Job.success_estimate(target, _typical_job()), 0.0, 1.0)
+	var mags := {
+		E.Goal.STANDING: Tuning.ASSIGN_DUTY_STANDING * p_succ,
+		E.Goal.VENGEANCE: (1.0 - p_succ),
+	}
+	# plan_value has no return-on-investment threshold of its own; the
+	# planner compares the weighted sum against PLAN_MIN_TERMINAL_SCORE, so
+	# returning both terms unconditionally is fine — w_standing at 0 just
+	# zeroes its contribution the same way it would in the real scorer.
+	return mags if (w_standing > 0.0 or vengeance > 0.0) else {}
+
+
+static func _typical_job() -> Job:
+	var j := Job.new()
+	j.difficulty = Tuning.PLAN_ASSUMED_JOB_DIFFICULTY
+	return j
+
+
 func execute(world: WorldState, cand: ActionCandidate) -> Event:
 	var actor: Character = world.characters[cand.actor_id]
 	var target: Character = world.characters[cand.target_id]
@@ -41,6 +76,7 @@ func execute(world: WorldState, cand: ActionCandidate) -> Event:
 		return null
 	j.assigned_to_id = target.id
 	j.assigned_by_id = actor.id
+	j.assigned_turn = world.turn
 	var e := Event.new()
 	e.turn = world.turn
 	e.actor_id = actor.id

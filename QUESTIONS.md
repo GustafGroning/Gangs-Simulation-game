@@ -2,6 +2,33 @@
 
 Single place for open questions. When answered: harvest into DECISIONS.md/canon/code, then delete the entry.
 
+## 2026-08-15 — Phase 5: pulled SabotageJob forward from phase 6; PhaseTest run interrupted, unverified
+Proceeding autonomously through phases 5-7 per instruction. Phase 5's own
+task list contradicts itself: the Goal line says "still only the phase-2
+verbs" (TakeJob/AssignJob), but the same phase's task list names the
+escalation ladder "Sabotage → Frame → Kill". Empirically confirmed (real
+test run) that this isn't just a wording slip: with only TakeJob/AssignJob,
+AssignJob is almost never gated once `JOBS_PER_TURN=5` (required by phase
+4's already-passing no-inert-characters band) — 18/20 seeds formed zero
+plans. Phase 2/4's abundance requirement and phase 5's gating requirement
+compete for the same resource, so phase 5 as literally scoped can't pass
+its own exit test.
+
+My call: pull `SabotageJob` forward from phase 6 (simplest hostile verb,
+explicitly named in phase 5's own ladder text), which required adding one
+turn of latency between job assignment and resolution (`Job.assigned_turn`)
+so a job is ever observably "in progress" for anyone to sabotage. Full
+rationale in thoughts/phase_5_planner.md. **This is a significant judgment
+call under time pressure — please review whether pulling Sabotage forward
+was the right resolution, versus e.g. loosening phase 5's exit-test bands
+instead, or a different gating mechanism.**
+
+Session was interrupted (Gustaf went to bed) immediately after this change,
+mid-regression-testing — `tests/test_phase3.gd` hung and was killed at a
+2-minute timeout, not yet root-caused. **Nothing from this entry has passed
+validation.** See thoughts/phase_5_planner.md's "Where it broke off" section
+for the exact resume point and suspects.
+
 ## 2026-08-14 — TakeJob's perceived detectability vs. actual detectability
 `TakeJobAction`'s authored `trace_templates` (read by `Risk.perceived` for the
 actor's own risk estimate) use a flat `Tuning.TAKEJOB_RISK_DETECT_ESTIMATE =
@@ -24,10 +51,13 @@ this non-interactive context). This means an agent triggered via a GitHub
 issue can write GDScript but cannot run `tests/phase*_exit_test.sh` or any
 headless sim command — which conflicts with this project's core validation
 model ("most failures here are silent... never advance without a passing exit
-test"). Phase 4's exit test is still unrun as a result. Options: bake a Godot
-4.7 headless binary into the Actions runner image/setup step, or treat
-`@claude` issue runs as code-writing/static-review only and keep exit-test
-validation to local sessions. Which do you want?
+test"). Options: bake a Godot 4.7 headless binary into the Actions runner
+image/setup step, or treat `@claude` issue runs as code-writing/static-review
+only and keep exit-test validation to local sessions. Which do you want?
+(Update 2026-08-15: no longer blocking phase 4 specifically — a local
+Godot-capable session ran `tests/phase4_exit_test.sh` and it now passes, see
+thoughts/phase_4_scorer.md and DECISIONS.md. The underlying policy question
+for future `@claude` runs stands.)
 
 ## 2026-08-14 — Job outcome bands vs. the resolution formula (doc 3)
 Doc 3 §6 targets "roughly 30/30/30/10" across SUCCESS/PARTIAL/FAILURE/DISASTER,

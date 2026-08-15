@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tests/phase*_exit_test.sh*)",
+      "Bash(./tests/phase*_exit_test.sh*)",
+      "Bash(./gangs *)",
+      "Bash(ci/check_determinism_bans.sh*)"
+    ]
+  }
+}
