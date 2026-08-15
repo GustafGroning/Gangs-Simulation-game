@@ -2,32 +2,82 @@
 
 Single place for open questions. When answered: harvest into DECISIONS.md/canon/code, then delete the entry.
 
-## 2026-08-15 — Phase 5: pulled SabotageJob forward from phase 6; PhaseTest run interrupted, unverified
-Proceeding autonomously through phases 5-7 per instruction. Phase 5's own
-task list contradicts itself: the Goal line says "still only the phase-2
-verbs" (TakeJob/AssignJob), but the same phase's task list names the
-escalation ladder "Sabotage → Frame → Kill". Empirically confirmed (real
-test run) that this isn't just a wording slip: with only TakeJob/AssignJob,
-AssignJob is almost never gated once `JOBS_PER_TURN=5` (required by phase
-4's already-passing no-inert-characters band) — 18/20 seeds formed zero
-plans. Phase 2/4's abundance requirement and phase 5's gating requirement
-compete for the same resource, so phase 5 as literally scoped can't pass
-its own exit test.
+## 2026-08-15 — Phases 5-6 built in a sandbox with no Godot binary — NOTHING below has been executed
+This entire pass (finishing phase 5, building all of phase 6) was written in
+the `@claude` GitHub Actions sandbox, which — same as the 2026-08-14 entry
+below — has no `godot` binary on PATH and no permitted package/network
+access to install one, and this time additionally has no interactive Bash
+approval available (every non-allowlisted shell command times out
+unanswered), so not even a quick "does godot exist" probe was possible.
+Per your issue instruction, validation was explicitly skipped and the work
+proceeded anyway — but that means `tests/phase5_exit_test.sh` and
+`tests/phase6_exit_test.sh` (both written this session) have **never been
+run**, not even once, and neither have the phase 1/3/4 regressions this
+session's edits touch (turn.gd's resolution loop, Beliefs, Traces,
+assign_job.gd). Everything below is static-review-only. **First thing to do
+on a local/Godot-capable session: run `tests/phase6_exit_test.sh` and
+iterate on tuning** — I'd specifically watch:
+- `deaths_per_100_turns` (target 2-6): tuned `RIVAL_HIT_SHARE=0.125` and
+  `KILL_VENGEANCE_GATE=0.5` by reasoning, not measurement — very plausibly
+  wrong in either direction.
+- Whether the cast survives 200 turns at all — with only ONE rank-change
+  mechanism (contest, no Advocate/Expansion) and now several ways to
+  permanently remove people (Kill, Judgment KILLED/EXILED, arrest, rival
+  hit), a 16-20 person cast could plausibly deplete over 200 turns. Nothing
+  currently caps or replenishes population.
+- Whether `Contest.run_all` firing on the deliberate starting vacancy from
+  turn 1 onward (new behavior — no Advocate action exists in the 7-verb
+  demo, so the automatic end-of-turn contest is now the ONLY way any
+  vacancy fills) changes phase 1/3/4/5's regression numbers. Nothing in
+  those phases' exit tests locked in "the starting vacancy stays open," but
+  it's a real behavioral change to the shared turn loop worth a look.
+- The phase-3 hang from the entry this replaces was never root-caused
+  either (see thoughts/phase_5_planner.md) — if `test_phase3.gd` is still
+  slow/stuck, it predates this session's changes.
 
-My call: pull `SabotageJob` forward from phase 6 (simplest hostile verb,
-explicitly named in phase 5's own ladder text), which required adding one
-turn of latency between job assignment and resolution (`Job.assigned_turn`)
-so a job is ever observably "in progress" for anyone to sabotage. Full
-rationale in thoughts/phase_5_planner.md. **This is a significant judgment
-call under time pressure — please review whether pulling Sabotage forward
-was the right resolution, versus e.g. loosening phase 5's exit-test bands
-instead, or a different gating mechanism.**
+## 2026-08-15 — Design gaps in this pass, needing your read
+Several places where canon was vague enough that I made a call rather than
+invent canon silently (per CLAUDE.md). All are comments in the code too;
+listed together here for a single pass:
+- **Kill's "opportunity or instrument" gate** (`sim/actions/kill.gd`) —
+  read as: tree-adjacent (crew/patron — "opportunity") OR
+  `vengeance >= KILL_VENGEANCE_GATE=0.5` ("instrument", i.e. motivated
+  enough to have found one). Any crew/patron pair can currently kill each
+  other with zero grudge as long as the scorer's utility clears risk — is
+  proximity alone too permissive?
+- **Dig is scoped to the belief's ACTOR field only** (`sim/actions/dig.gd`)
+  — the Field enum (doc 1 §2) has no MOTIVE value and nothing populates
+  INSTRUMENT yet, so "field: actor | instrument | motive | verify(field)"
+  from design_doc.md's Dig spec is narrowed to ACTOR, which the doc itself
+  calls the crux of the design. Add MOTIVE to the Field enum for a future
+  pass, or is ACTOR-only sufficient for the demo?
+- **Judgment DEMOTED with no vacant lower slot** (`sim/content/judgment.gd`
+  `_demote`) — the schema has no "active but slot-less" CharState, so this
+  falls back to EXILED. Judgment call under time pressure, not a canon
+  answer.
+- **Arrest is permanent, not "5-15 turns"** (`sim/content/exogenous.gd`) —
+  same CharState gap (no state for "temporarily absent"); implemented as a
+  permanent EXILED-equivalent removal instead of building a whole
+  scheduled-return subsystem. Worth a real mechanism if arrests turn out to
+  matter a lot for pacing.
+- **Exogenous events step placement** — doc 3 §3 has no numbered slot in
+  the GDD's 12-step turn order; placed at "1b", right after upkeep/before
+  the job board, so the cast reacts to a fresh event the same turn. Turn.gd
+  flags this too.
+- **Only Rival Hit + Arrest built** of doc 3 §3's 8 exogenous kinds, per
+  doc 5 phase 6 task 7's explicit "prioritise" instruction — the other six
+  (police pressure, the big score, lean times, the informant, family
+  trouble, outside offer) are BACKLOG.md, not built.
 
-Session was interrupted (Gustaf went to bed) immediately after this change,
-mid-regression-testing — `tests/test_phase3.gd` hung and was killed at a
-2-minute timeout, not yet root-caused. **Nothing from this entry has passed
-validation.** See thoughts/phase_5_planner.md's "Where it broke off" section
-for the exact resume point and suspects.
+## 2026-08-15 — Phase 5 (RESOLVED — validated this session, statically): pulled SabotageJob forward from phase 6
+Prior entry's resolution stands: `SabotageJob` was pulled forward from phase
+6 into phase 5 (see DECISIONS.md and thoughts/phase_5_planner.md for the
+original rationale — phase 5's own task list contradicted its Goal line,
+and empirically zero plans formed under TakeJob/AssignJob alone once
+`JOBS_PER_TURN=5`). `tests/phase5_exit_test.sh` was written this session to
+close out the phase, but — see the entry above — it has not actually been
+run. Still flagged for your review, now alongside phase 6's own judgment
+calls.
 
 ## 2026-08-14 — TakeJob's perceived detectability vs. actual detectability
 `TakeJobAction`'s authored `trace_templates` (read by `Risk.perceived` for the

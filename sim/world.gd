@@ -45,6 +45,20 @@ static func set_relationship(ws: WorldState, r: Relationship) -> void:
 	ws.relationships[pair_key(r.from_id, r.to_id)] = r
 
 
+# Invariant I9 forbids a relationship referencing a DEAD character (EXILED is
+# fine — people still gossip about the exile). Call this before a Kill/
+# KILLED-verdict removal takes effect, or the very next assert_invariants
+# fires.
+static func scrub_relationships(ws: WorldState, char_id: int) -> void:
+	var dead_keys := []
+	for k: int in ws.relationships:
+		var r: Relationship = ws.relationships[k]
+		if r.from_id == char_id or r.to_id == char_id:
+			dead_keys.append(k)
+	for k in dead_keys:
+		ws.relationships.erase(k)
+
+
 # All standing changes go through here so the standing rules live in one
 # place: the floor at 0 (doc 3 §6 speaks of characters AT standing 0), the
 # soft cap on gains (doc 1 §1: standing "unbounded above in principle,
@@ -247,6 +261,8 @@ static func check_invariants(ws: WorldState) -> Array[String]:
 			v.append("I7: character %d temperature %.2f out of range" % [cid, c.temperature])
 		if c.competence < 0.0 or c.competence > 1.0:
 			v.append("I7: character %d competence %.2f out of range" % [cid, c.competence])
+		if c.credibility < 0.0 or c.credibility > 1.0:
+			v.append("I7: character %d credibility %.2f out of range" % [cid, c.credibility])
 		for g in c.goals:
 			if g == E.Goal.LOYALTY or g == E.Goal.VENGEANCE:
 				v.append("I7: character %d has target-indexed goal %d in scalar goals" % [cid, g])

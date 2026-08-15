@@ -184,6 +184,25 @@ static func _boss_id(ws: WorldState) -> int:
 
 static func resolve(ws: WorldState, j: Job, chron: Chronicle, metrics: Metrics, chosen_note: String = "") -> Event:
 	var worker: Character = ws.characters[j.assigned_to_id]
+	# Phase 6: the worker may have been killed/exiled/arrested THIS turn by a
+	# higher-priority action or Judgment before their in-flight job reached
+	# resolution (jobs.assigned one turn earlier always resolve one turn
+	# later — see Job.assigned_turn). Nobody to credit or blame; the job is
+	# simply abandoned rather than crediting/penalizing a no-longer-active
+	# character.
+	if worker.state != E.CharState.ACTIVE:
+		j.resolved = true
+		j.outcome = E.JobOutcome.PENDING
+		var e_abandon := Event.new()
+		e_abandon.turn = ws.turn
+		e_abandon.actor_id = worker.id
+		e_abandon.action = &"take_job"
+		e_abandon.visibility = E.Visibility.OPEN
+		e_abandon.outcome = {"job_id": j.id, "kind": String(j.kind), "outcome": j.outcome, "abandoned": true}
+		ws.add_event(e_abandon)
+		metrics.job_abandoned()
+		chron.line("· job #%d (%s) abandoned — %s is no longer active" % [j.id, j.kind, worker.name])
+		return e_abandon
 	var rank_bonus := (3 - worker.rank) * Tuning.JOB_RANK_BONUS_PER_LEVEL
 	var sabotage_penalty := Tuning.SABOTAGE_PENALTY if j.sabotaged_by_id != -1 else 0.0
 	var value := clampf(
@@ -212,7 +231,9 @@ static func resolve(ws: WorldState, j: Job, chron: Chronicle, metrics: Metrics, 
 		j.outcome = E.JobOutcome.DISASTER
 		standing_delta = -j.payout_standing * Tuning.JOB_DISASTER_STANDING_MULT
 		Heat.add(ws, Tuning.JOB_DISASTER_HEAT)
-		# Possible arrest on violent DISASTERs lands in phase 6 (doc 3 §3).
+		# Possible arrest on violent DISASTERs: turn.gd calls
+		# Exogenous.maybe_arrest_from_disaster right after this resolves,
+		# since j.outcome/j.kind need to be checked post-resolution.
 	if bool(Tuning.JOB_KINDS[j.kind]["violent"]):
 		Heat.add(ws, Tuning.HEAT_ENFORCEMENT)
 

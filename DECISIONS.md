@@ -2,6 +2,88 @@
 
 Newest first. Each entry: what was decided, and why.
 
+## 2026-08-15 — Phase 6 (UNVALIDATED — see QUESTIONS.md's sandbox entry)
+
+Built in the `@claude` GitHub Actions sandbox with no Godot binary and no
+interactive Bash approval — everything below is static review, never run.
+Finishes phase 5 (writes the exit test only — the code was already there)
+and builds all of phase 6: the last three demo verbs, Judgment, the vacancy
+contest, and Rival Hit/Arrest.
+
+- **`Character.credibility: float = 1.0`** — new field, not in doc 1's
+  schema. Doc 3 §4: "a DISMISSED verdict damages the accuser's credibility,
+  reducing the weight of their future beliefs during transmission"; reused
+  for a collapsed Dig's source too. Multiplies confidence in
+  `Beliefs.transmission`/`upward_reporting`/`deliver_chosen`. I7 range-checked
+  like every other 0..1 field.
+- **`World.scrub_relationships(ws, char_id)`** — new helper, called
+  whenever a character becomes DEAD (Kill, Judgment KILLED, Rival Hit).
+  Invariant I9 forbids a relationship referencing a DEAD character (EXILED
+  is fine); nothing previously removed a character mid-run, so this gap
+  was latent until Kill existed.
+- **Actor-liveness re-check added to turn.gd's resolution loop**
+  (`if actor.state != E.CharState.ACTIVE: continue`) — Kill can now remove
+  a character mid-turn (a higher-priority action executing before a
+  lower-priority one queued by the same now-dead actor). Same idea as the
+  existing `requires()` re-check (invariant I3), just covering the actor's
+  own liveness, which no `requires()` implementation checked before because
+  nothing could previously die mid-turn. `AssignJob.requires()`/
+  `gated_recoverably()` got the equivalent target-liveness check for the
+  same reason (a target could now die between candidate generation and
+  execution).
+- **`Job.resolve()` guards a since-removed worker** — a job's worker can
+  now die/be exiled/arrested in the one turn between assignment and
+  resolution (phase 5's latency). Resolving against them would silently
+  credit/penalize a no-longer-active character; instead the job is marked
+  `resolved` with `PENDING` outcome and a new `jobs_abandoned` metric, no
+  event side effects.
+- **Vacancy contest wired into every turn (`Contest.run_all`, turn step
+  10)** — runs for EVERY currently-vacant slot, including the deliberate
+  starting rank-2 vacancy from `WorldGen.bootstrap`. There is no Advocate
+  action in the 7-verb demo, so this is now the ONLY way any vacancy ever
+  fills — meaning the starting vacancy will be contested and filled from
+  turn 1 onward, a real behavioral change to the shared turn loop that
+  phases 1-5's existing regression tests were never run against post-change
+  (see QUESTIONS.md).
+- **Exogenous events placed at turn step "1b"**, right after upkeep/trace
+  decay and before the job board — doc 3 §3 doesn't assign a numbered slot
+  in the GDD's 12-step order. Placed early so the cast's own action
+  selection that turn reacts to a fresh rival hit/arrest.
+- **`RIVAL_HIT_SHARE = 0.125`** — doc 3's `EXO_BASE_CHANCE=0.15` is
+  specified against the FULL 8-kind exogenous table ("roughly one shock
+  every 6-8 turns"); only Rival Hit is implemented as a base-chance roll
+  (Arrest is independently triggered by heat/DISASTER), so using
+  `EXO_BASE_CHANCE` at face value for Rival Hit alone would fire ~8x doc
+  3's intended overall cadence. Scaled by 1/8 as a placeholder weighting
+  until more exogenous kinds exist. Unverified — see QUESTIONS.md.
+- **Arrest and Judgment DEMOTED (no vacant lower slot) both resolve to a
+  permanent EXILED-equivalent removal** — the schema's `CharState` enum
+  (ACTIVE/DEAD/EXILED) has no state for "temporarily absent" or "active but
+  slot-less" (invariant I6 forbids the latter). Both are judgment calls
+  under time pressure, not canon answers — see QUESTIONS.md.
+- **Dig scoped to the belief's ACTOR field only** — `E.Field` has no MOTIVE
+  value and nothing populates INSTRUMENT; ACTOR is what design_doc.md calls
+  "the crux of the entire design", so Dig resolves/corroborates/collapses/
+  false-resolves a belief's ACTOR claim and nothing else.
+- **`Beliefs.pick_plausible_suspect` extracted from `_mutate_claim`** — the
+  "who looks guilty" motive-weighted pool/pick logic is identical between
+  passive gossip mutation/speculation and Dig's false-resolve (the doc says
+  so explicitly: "same mutation logic as rumor transmission"), so it's one
+  function now, called from both `beliefs.gd` and `dig.gd`.
+- **`ESCALATION_LADDER` extended to `assign_job -> sabotage_job -> kill`**,
+  with a second dict entry keyed by `sabotage_job` pointing at the same
+  array — `Planner._try_escalate` looks the ladder up by the plan's
+  CURRENT `goal_action`, not its original starting action, so every rung
+  except the last needs its own key or an already-escalated plan can never
+  climb again (this was fine before by accident: the old 2-rung ladder never
+  needed a second key since sabotage_job had nowhere further to go).
+- **Only Rival Hit and Arrest built** of doc 3 §3's 8 exogenous event kinds
+  — doc 5 phase 6 task 7 explicitly says to prioritise these two; the other
+  six are BACKLOG.md.
+- **Expansion/Contraction (doc 3 §2) not built** — design_doc.md's "Demo
+  scope" section is explicit: "Rank change: one mechanism only — Removal ->
+  contest." Only the contest exists; slot count is fixed for the whole run.
+
 ## 2026-08-15 — Phase 4 (validated)
 
 - **`JOBS_PER_TURN` raised 3→5.** The phase-4 scorer replaced the phase-2

@@ -18,6 +18,12 @@ static func run(ws: WorldState, chron: Chronicle, metrics: Metrics, injections: 
 	Heat.decay(ws)
 	Traces.decay_all(ws)
 
+	# 1b. Exogenous events (doc 3 §3). No numbered step in the GDD's 12-step
+	# list — placed early so the cast's action selection this turn reacts to
+	# a fresh rival hit / arrest rather than a stale one. Judgment call; see
+	# DECISIONS.md.
+	Exogenous.maybe_fire(ws, chron, metrics)
+
 	# 2. Job board
 	Job.generate_board(ws, chron, metrics)
 	metrics.board_sample(Job.open_unassigned(ws).size())
@@ -68,6 +74,12 @@ static func run(ws: WorldState, chron: Chronicle, metrics: Metrics, injections: 
 		var action := ActionRegistry.get_action(cand.action)
 		var actor: Character = ws.characters[cand.actor_id]
 		var target: Character = ws.characters.get(cand.target_id) if cand.target_id != -1 else null
+		# Phase 6: the actor may have been killed/exiled by an earlier
+		# higher-priority action (or Judgment, or an exogenous event) this
+		# same turn — their own queued candidate fizzles just like a stale
+		# requires() gate (invariant I3).
+		if actor.state != E.CharState.ACTIVE:
+			continue
 		# Directed assignment pre-empts self-selection: whoever was given a
 		# job this turn forfeits their own chosen action (doc 3 §1).
 		if Job.assigned_open_job(ws, actor.id) != null:
@@ -81,7 +93,7 @@ static func run(ws: WorldState, chron: Chronicle, metrics: Metrics, injections: 
 		actor.last_target = cand.target_id
 		if ev != null:
 			metrics.mark_acted(actor.id)
-			metrics.action_chosen(ev.action)
+			metrics.action_chosen(ev.action, actor.id)
 			var tname: String = target.name if target != null else ""
 			chron.line("%s %s %s  (%s)" % [actor.name, ev.action, tname, Scorer.top_terms(cand)])
 		else:
@@ -115,7 +127,10 @@ static func run(ws: WorldState, chron: Chronicle, metrics: Metrics, injections: 
 	for j: Job in to_resolve:
 		metrics.mark_acted(j.assigned_to_id)
 		var ev := Job.resolve(ws, j, chron, metrics, contrib_notes.get(j.assigned_to_id, ""))
-		metrics.action_chosen(ev.action)
+		metrics.action_chosen(ev.action, j.assigned_to_id)
+		# Doc 3 §1: "DISASTER on a violent job may trigger an arrest."
+		if j.outcome == E.JobOutcome.DISASTER and bool(Tuning.JOB_KINDS[j.kind].get("violent", false)):
+			Exogenous.maybe_arrest_from_disaster(ws, j.assigned_to_id, chron, metrics)
 	if ws.heat > heat_before:
 		metrics.heat_added(ws)
 
@@ -130,8 +145,11 @@ static func run(ws: WorldState, chron: Chronicle, metrics: Metrics, injections: 
 	Beliefs.transmission(ws, chron)
 	# 8. Upward reporting — recipient selection, budgets, fidelity.
 	Beliefs.upward_reporting(ws, metrics, chron)
-	# 9. Judgment — STUB until phase 6.
-	# 10. Rank changes — STUB until phase 6.
+	# 9. Judgment — any Denounce triggered this turn is adjudicated.
+	Judgment.process_all(ws, chron, metrics)
+	# 10. Rank changes — vacancies (from Kill, Judgment, arrests, or the
+	# initial deliberate vacancy) contested, tree redrawn.
+	Contest.run_all(ws, chron, metrics)
 	# 11. Goal update — weight dynamics and decay toward baseline.
 	Weights.update(ws)
 

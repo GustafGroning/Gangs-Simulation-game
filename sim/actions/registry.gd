@@ -10,7 +10,10 @@ static var _actions: Dictionary = {}
 static func _ensure() -> void:
 	if not _actions.is_empty():
 		return
-	for a: Action in [IdleAction.new(), TakeJobAction.new(), AssignJobAction.new(), SabotageJobAction.new()]:
+	for a: Action in [
+		IdleAction.new(), TakeJobAction.new(), AssignJobAction.new(), SabotageJobAction.new(),
+		DigAction.new(), SpreadRumorAction.new(), DenounceAction.new(), KillAction.new(),
+	]:
 		_actions[a.id] = a
 
 

@@ -4,7 +4,7 @@ extends RefCounted
 # (with actor mutation), and upward reporting. This module reads ground truth
 # because it implements perception; nothing under ai/ ever may.
 
-const HOSTILE_ACTIONS: Array[StringName] = [&"sabotage_job", &"kill", &"frame"]
+const HOSTILE_ACTIONS: Array[StringName] = [&"sabotage_job", &"kill", &"frame", &"rival_hit"]
 
 
 # ---- Acquisition ----
@@ -12,12 +12,37 @@ const HOSTILE_ACTIONS: Array[StringName] = [&"sabotage_job", &"kill", &"frame"]
 # The actor of an event knows what they did; an assignment's target knows
 # they were told. Nobody else gets free knowledge.
 static func grant_first_hand(ws: WorldState, e: Event) -> void:
+	# actor_id == -1 marks an exogenous "outsider" event (phase 6, doc 3 §3,
+	# e.g. Rival Hit) — nobody in the tree "did" it, so there is no first-hand
+	# claimant.
+	if e.actor_id == -1:
+		return
 	var claim := {E.Field.ACTOR: e.actor_id, E.Field.ACTION: e.action}
 	if e.target_id != -1:
 		claim[E.Field.TARGET] = e.target_id
 	_merge(ws, ws.characters[e.actor_id], e.id, claim, Tuning.FIRSTHAND_ACTOR_CONFIDENCE, -1, 0, null)
 	if e.action == &"assign_job" and e.target_id != -1:
 		_merge(ws, ws.characters[e.target_id], e.id, claim.duplicate(), Tuning.FIRSTHAND_ACTOR_CONFIDENCE, -1, 0, null)
+
+
+# A deliberate broadcast (Judgment verdicts; doc 3 §4 calls it "the one
+# reliable broadcast channel in the game") — grants holder a belief directly,
+# bypassing detection/transmission. source_id -1 / hops 0, same as first-hand.
+static func grant_public(ws: WorldState, holder: Character, event_id: int, claim: Dictionary, conf: float, chron: Chronicle = null) -> void:
+	_merge(ws, holder, event_id, claim.duplicate(), conf, -1, 0, chron)
+
+
+# ---- Deliberate delivery (SpreadRumor, phase 6) ----
+
+# Unlike passive transmission (which rolls per-neighbor every turn), this is
+# a chosen act: the sender picked the recipient and the belief. Same
+# mutation logic as passive gossip (a deliberate telling can still drift),
+# but a gentler hop-confidence decay — a direct telling is clearer than an
+# overheard rumor chain — and scaled by the sender's credibility.
+static func deliver_chosen(ws: WorldState, sender: Character, recipient: Character, b: Belief) -> void:
+	var claim := _mutate_claim(ws, b.claim, int(b.claim.get(E.Field.TARGET, -1)), sender.id)
+	var conf: float = b.confidence * (1.0 - Tuning.SPREAD_RUMOR_HOP_DECAY) * sender.credibility
+	_merge(ws, recipient, b.event_id, claim, conf, sender.id, b.hops + 1, null)
 
 
 # A found trace produces a belief holding ONLY what the trace reveals.
@@ -130,7 +155,9 @@ static func transmission(ws: WorldState, chron: Chronicle) -> void:
 				var claim := _mutate_claim(ws, b.claim, int(b.claim.get(E.Field.TARGET, -1)), cid)
 				deliveries.append({
 					"to": n, "event_id": b.event_id, "claim": claim,
-					"conf": b.confidence * (1.0 - Tuning.HOP_CONFIDENCE_DECAY),
+					# credibility (phase 6, doc 3 §4): a discredited gossip
+					# lands softer — see Character.credibility.
+					"conf": b.confidence * (1.0 - Tuning.HOP_CONFIDENCE_DECAY) * c.credibility,
 					"source": cid, "hops": b.hops + 1,
 				})
 	for d in deliveries:
@@ -163,13 +190,26 @@ static func _mutate_claim(ws: WorldState, claim: Dictionary, target_id: int, sen
 	if ws.rng.randf() >= roll_chance:
 		return out
 	var current := int(out.get(E.Field.ACTOR, -1))
+	var suspect := pick_plausible_suspect(ws, target_id, [current, sender_id])
+	if suspect != -1:
+		out[E.Field.ACTOR] = suspect
+	return out
+
+
+# Shared "who looks guilty" weighting: motive-biased toward whoever has
+# public known_motive against target_id (doc: mutation "weighted toward
+# plausible suspects"). Used by gossip mutation/speculation above and by
+# Dig's false-resolve (phase 6, sim/actions/dig.gd) — same logic, doc calls
+# it out explicitly as identical ("same mutation logic as rumor transmission").
+# Returns -1 if no eligible suspect exists.
+static func pick_plausible_suspect(ws: WorldState, target_id: int, exclude_ids: Array) -> int:
 	var pool: Array = []
 	var weights: Array = []
 	var char_ids := ws.characters.keys()
 	char_ids.sort()
 	for sid in char_ids:
 		var s: Character = ws.characters[sid]
-		if s.state != E.CharState.ACTIVE or sid == target_id or sid == current or sid == sender_id:
+		if s.state != E.CharState.ACTIVE or sid == target_id or sid in exclude_ids:
 			continue
 		var motive := 0.0
 		var rel := World.relationship_of(ws, sid, target_id)
@@ -177,9 +217,9 @@ static func _mutate_claim(ws: WorldState, claim: Dictionary, target_id: int, sen
 			motive = rel.known_motive
 		pool.append(sid)
 		weights.append(Tuning.MUTATION_BASE_WEIGHT + Tuning.MUTATION_MOTIVE_BIAS * motive)
-	if not pool.is_empty():
-		out[E.Field.ACTOR] = int(Rng.weighted_pick(pool, weights, ws.rng))
-	return out
+	if pool.is_empty():
+		return -1
+	return int(Rng.weighted_pick(pool, weights, ws.rng))
 
 
 # ---- Upward reporting (turn step 8) ----
@@ -230,7 +270,8 @@ static func upward_reporting(ws: WorldState, metrics: Metrics, chron: Chronicle)
 			proposals.append({
 				"recipient": recipient, "sender": cid, "event_id": b.event_id,
 				"claim": claim,
-				"conf": b.confidence * (1.0 - Tuning.HOP_CONFIDENCE_DECAY) * fidelity,
+				# credibility (phase 6, doc 3 §4): see Character.credibility.
+				"conf": b.confidence * (1.0 - Tuning.HOP_CONFIDENCE_DECAY) * fidelity * c.credibility,
 				"hops": b.hops + 1,
 			})
 	# Superior attention budget: process the N most confident, drop the rest.

@@ -20,7 +20,7 @@ func _init() -> void:
 
 
 func requires(world: WorldState, actor: Character, target: Character) -> bool:
-	if target == null or actor.rank >= target.rank:
+	if target == null or target.state != E.CharState.ACTIVE or actor.rank >= target.rank:
 		return false
 	if not (target.id in actor.crew_ids):
 		return false
@@ -37,7 +37,7 @@ func evaluate(world: WorldState, actor: Character, target: Character) -> Diction
 # currently matches — that clears on its own when the board refreshes, so
 # it's worth a plan; a rank/crew mismatch never will be.
 func gated_recoverably(world: WorldState, actor: Character, target: Character) -> bool:
-	if target == null or actor.rank >= target.rank or not (target.id in actor.crew_ids):
+	if target == null or target.state != E.CharState.ACTIVE or actor.rank >= target.rank or not (target.id in actor.crew_ids):
 		return false
 	if Job.assigned_open_job(world, target.id) != null:
 		return false
